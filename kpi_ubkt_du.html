@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>KPI UBKT Đảng ủy cấp xã - Tính toán & Theo dõi</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root{
+    --primary:#0d47a1;
+    --accent:#1565c0;
+    --bg:#f4f7f9;
+    --card:#ffffff;
+    --muted:#6b7280;
+    --line:#e5e7eb;
+  }
+  *{box-sizing:border-box}
+  body{font-family:Inter, system-ui, Roboto, "Helvetica Neue", Arial; background:var(--bg); color:#111827; margin:0; padding:24px;}
+  .wrap{max-width:1180px;margin:0 auto;background:var(--card);padding:22px;border-radius:14px;box-shadow:0 10px 28px rgba(0,0,0,0.08);}
+  header{display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:6px}
+  h1{margin:0;color:var(--primary);font-size:1.6rem;text-align:center}
+  .lead{margin:6px 0 10px;color:#374151;text-align:center}
+  .meta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;color:#4b5563;font-size:0.9rem;margin-bottom:6px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin:14px 0;}
+  .card{background:#fbfcff;border:1px solid #e8eefc;padding:12px;border-radius:10px;}
+  label{display:block;font-weight:700;margin-bottom:6px;color:#0d3b66;font-size:0.95rem;}
+  .inputs{display:flex;gap:8px;align-items:flex-end}
+  .inputs .col{flex:1}
+  input[type="number"], input[type="text"]{width:100%;padding:9px;border-radius:8px;border:1px solid #cfd9f6;font-size:0.95rem;background:#fff}
+  .muted{font-size:0.85rem;color:var(--muted);margin-top:6px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:16px 0;}
+  button{padding:10px 14px;border-radius:10px;border:1px solid #cfd9f6;background:#fff;color:var(--accent);cursor:pointer;font-weight:700}
+  button.primary{background:var(--accent);color:#fff;border-color:transparent}
+  button.danger{color:#b91c1c;border-color:#fecaca}
+  .layout{display:flex;gap:18px;flex-wrap:wrap}
+  .left{flex:1;min-width:340px}
+  .right{width:380px;max-width:100%}
+  .stat{background:#f7fbff;padding:12px;border-radius:10px;border:1px solid #eef6ff;text-align:center}
+  canvas{max-width:100%;height:380px}
+  .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px}
+  table{width:100%;border-collapse:collapse;background:#fff}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:0.93rem}
+  th{background:#f8fafc;color:#111827;position:sticky;top:0}
+  footer{font-size:0.85rem;color:#6b7280;text-align:center;margin-top:14px}
+  .small{font-size:0.85rem;color:#374151}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:0.8rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>KPI – Ủy ban Kiểm tra Đảng ủy cấp xã</h1>
+  </header>
+  <p class="lead">Nhập số liệu thực hiện và chỉ tiêu cho từng nội dung công tác của UBKT. Hệ thống sẽ tính % hoàn thành, tô màu theo ngưỡng và vẽ biểu đồ cột.</p>
+  <div class="meta">
+    <span class="pill">Năm: <input id="namBaoCao" type="number" value="2025" min="2000" style="width:92px;padding:6px;border-radius:999px;border:1px solid #cfd9f6"></span>
+    <span class="pill">Đơn vị: <input id="tenDonVi" type="text" value="UBKT Đảng ủy xã ..." style="width:260px;padding:6px;border-radius:999px;border:1px solid #cfd9f6"></span>
+  </div>
+
+  <form id="kpiForm" class="grid" autocomplete="off"></form>
+
+  <div class="controls">
+    <button id="calcBtn" class="primary">Tính & Cập nhật biểu đồ</button>
+    <button id="resetBtn">Đặt lại mặc định</button>
+    <button id="exportPng">Tải ảnh biểu đồ (PNG)</button>
+    <button id="exportCsv">Tải dữ liệu (CSV)</button>
+    <button id="exportJson">Tải dữ liệu (JSON)</button>
+    <button id="downloadHtml">Tải trang hiện tại (.html)</button>
+  </div>
+
+  <div class="layout">
+    <div class="left">
+      <div class="card">
+        <h3 style="margin:0 0 10px">Biểu đồ % hoàn thành</h3>
+        <canvas id="kpiChart"></canvas>
+      </div>
+      <div class="muted">Ngưỡng màu: xanh ≥100% (đạt/sớm hơn), vàng 80–99% (gần đạt), đỏ &lt;80% (chưa đạt).</div>
+    </div>
+
+    <div class="right">
+      <div class="card">
+        <h3 style="margin:0 0 10px">Tóm tắt nhanh</h3>
+        <div id="summaryArea" class="small"></div>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <h3 style="margin:0 0 10px">Bảng dữ liệu</h3>
+        <div class="table-wrap">
+          <table id="dataTable">
+            <thead>
+              <tr><th>#</th><th>Nội dung KPI</th><th>Thực hiện</th><th>Chỉ tiêu</th><th>%</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Căn cứ xây dựng bộ KPI dựa trên Kế hoạch/Nhiệm vụ trọng tâm của UBKT Đảng ủy cấp xã (tham mưu; giám sát; kiểm tra; kiểm soát tài sản, thu nhập; giải quyết tố cáo/khiếu nại; kỷ luật; công tác nội bộ và chuyển đổi số).<br>
+    Nguồn mẫu form & biểu đồ dựa theo trang tham chiếu Kế hoạch 33. Tác giả: QB.
+  </footer>
+</div>
+
+<script>
+/* ================== CẤU HÌNH KPI MẶC ĐỊNH (UBKT) ==================
+Mỗi mục gồm:
+- key: mã trường
+- label: tên hiển thị (rút gọn)
+- desc: mô tả ngắn (hover/title)
+- target: mặc định chỉ tiêu (có thể chỉnh)
+- unit: đơn vị (thường là số lượng cuộc/đơn/kỳ, hoặc %)
+*/
+const DEFAULT_METRICS = [
+  // I. Tham mưu & kế hoạch
+  { key:'kehoach_ktgs', label:'1. Hoàn thành CT/KH KT,GS năm', desc:'Số CT/KH KT,GS ban hành/đã đề ra', target:1, unit:'bộ KH' },
+  { key:'theodoi_ketluan', label:'2. Theo dõi thực hiện KL KT,GS', desc:'Số KL được theo dõi/ tổng KL', target:100, unit:'%' },
+
+  // II. Giám sát
+  { key:'giamsat_thuongxuyen', label:'3. Giám sát thường xuyên', desc:'Báo cáo nắm tình hình hàng quý (thực hiện/4)', target:4, unit:'báo cáo' },
+  { key:'giamsat_chuyende', label:'4. Giám sát chuyên đề', desc:'Cuộc giám sát chuyên đề (thực hiện/kế hoạch)', target:2, unit:'cuộc' },
+
+  // III. Kiểm tra
+  { key:'kiemtra_dauhieu', label:'5. KT khi có dấu hiệu VP', desc:'Cuộc KT DHVP (thực hiện/kế hoạch)', target:2, unit:'cuộc' },
+  { key:'kiemtra_kyluat', label:'6. KT việc thi hành kỷ luật', desc:'Tổ chức đảng cấp dưới được kiểm tra (thực hiện/kế hoạch)', target:2, unit:'tổ chức' },
+  { key:'kiemtra_taichinh', label:'7. Kiểm tra tài chính/đảng phí', desc:'Đơn vị được kiểm tra (thực hiện/kế hoạch)', target:2, unit:'đơn vị' },
+
+  // IV. Kiểm soát tài sản, thu nhập
+  { key:'tstn_xacminh', label:'8. Xác minh TSTN', desc:'Số người xác minh/ chỉ tiêu năm (≥10% số kê khai)', target:10, unit:'người' },
+
+  // V. Tố cáo/Khiếu nại & Kỷ luật
+  { key:'tocao_dunghan', label:'9. Giải quyết tố cáo đúng hạn', desc:'Số đơn giải quyết đúng hạn/ tổng thụ lý', target:100, unit:'%' },
+  { key:'khieunai_dunghan', label:'10. Giải quyết khiếu nại đúng hạn', desc:'Số đơn giải quyết đúng hạn/ tổng thụ lý', target:100, unit:'%' },
+  { key:'kyluat_congbo', label:'11. Công bố quyết định kỷ luật kịp thời', desc:'Số QĐ công bố ≤10 ngày/ tổng số', target:100, unit:'%' },
+  { key:'dinhchi_kipthoigian', label:'12. Đình chỉ sinh hoạt kịp thời', desc:'Số QĐ trong 5 ngày/ tổng số phải đình chỉ', target:100, unit:'%' },
+
+  // VI. Công tác nội bộ & CĐS
+  { key:'thongke_pm', label:'13. Cập nhật số liệu trên Phần mềm', desc:'Số kỳ cập nhật/ số kỳ yêu cầu', target:12, unit:'kỳ' },
+  { key:'boiduong_cb', label:'14. Bồi dưỡng nghiệp vụ & kỹ năng số', desc:'CB tham gia/ tổng CB kiểm tra', target:100, unit:'%' }
+];
+
+const form = document.getElementById('kpiForm');
+
+function field(label, key, unit, desc, targetDefault){
+  const wrap = document.createElement('div');
+  wrap.className = 'card';
+
+  const lab = document.createElement('label');
+  lab.textContent = label;
+  lab.htmlFor = key + '_current';
+  wrap.appendChild(lab);
+
+  const inputs = document.createElement('div');
+  inputs.className = 'inputs';
+
+  const col1 = document.createElement('div');
+  col1.className = 'col';
+  const cur = document.createElement('input');
+  cur.type = 'number'; cur.step = 'any'; cur.min = '0';
+  cur.id = key + '_current'; cur.name = key + '_current'; cur.value = targetDefault;
+  cur.title = 'Giá trị thực hiện (đơn vị ' + unit + ')';
+  col1.appendChild(cur);
+
+  const col2 = document.createElement('div');
+  col2.style.width = '120px';
+  const lab2 = document.createElement('div');
+  lab2.textContent = 'Chỉ tiêu'; lab2.style.fontSize='0.8rem'; lab2.style.color='#6b7280';
+  const targ = document.createElement('input');
+  targ.type = 'number'; targ.step = 'any'; targ.min = '0.0001';
+  targ.id = key + '_target'; targ.name = key + '_target'; targ.value = targetDefault;
+  targ.title = 'Chỉ tiêu theo kế hoạch';
+  col2.appendChild(lab2); col2.appendChild(targ);
+
+  inputs.appendChild(col1);
+  const spacer = document.createElement('div'); spacer.style.width='8px'; inputs.appendChild(spacer);
+  inputs.appendChild(col2);
+
+  wrap.appendChild(inputs);
+
+  const hint = document.createElement('div');
+  hint.className = 'muted';
+  hint.textContent = 'Đơn vị: ' + unit + (desc ? ' — ' + desc : '');
+  wrap.appendChild(hint);
+
+  return wrap;
+}
+
+function createFields(){
+  form.innerHTML='';
+  DEFAULT_METRICS.forEach(m=> form.appendChild(field(m.label, m.key, m.unit, m.desc, m.target)));
+}
+
+createFields();
+
+/* ================== BIỂU ĐỒ ================== */
+const ctx = document.getElementById('kpiChart').getContext('2d');
+
+function pct(current, target){
+  if(!target || Number(target) === 0) return 0;
+  return (Number(current)/Number(target))*100;
+}
+function colorFor(p){
+  if(p >= 100) return 'rgba(46, 125, 50, 0.85)'; // xanh
+  if(p >= 80)  return 'rgba(255, 152, 0, 0.9)';  // vàng
+  return 'rgba(211, 47, 47, 0.9)';               // đỏ
+}
+
+let kpiChart = new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: DEFAULT_METRICS.map(m => m.label.replace(/^\d+\.\s*/,'')),
+    datasets: [{
+      label: '% Hoàn thành',
+      data: DEFAULT_METRICS.map(_=>100),
+      backgroundColor: DEFAULT_METRICS.map(_=>'rgba(46,125,50,0.85)'),
+      borderRadius: 6
+    }]
+  },
+  options: {
+    responsive: true,
+    scales: {
+      y: { beginAtZero:true, max: 200, title:{display:true,text:'% Hoàn thành (so với chỉ tiêu)'} },
+      x: { ticks:{autoSkip:false, maxRotation:80, minRotation:0} }
+    },
+    plugins: {
+      legend: { display:false },
+      tooltip: { callbacks: { label: (ctx)=> ctx.parsed.y.toFixed(1) + '%' } }
+    }
+  }
+});
+
+function gather(){
+  return DEFAULT_METRICS.map((m, idx)=>{
+    const c = Number(document.getElementById(m.key + '_current').value || 0);
+    const t = Number(document.getElementById(m.key + '_target').value || 0);
+    const p = pct(c,t);
+    return { i: idx+1, key:m.key, label:m.label, current:c, target:t, percent:p };
+  });
+}
+
+function updateUI(){
+  const rows = gather();
+  const perc = rows.map(r => Number(r.percent.toFixed(2)));
+  const colors = perc.map(colorFor);
+
+  // Chart
+  kpiChart.data.datasets[0].data = perc;
+  kpiChart.data.datasets[0].backgroundColor = colors;
+  const maxVal = Math.max(...perc, 100);
+  kpiChart.options.scales.y.max = Math.ceil(Math.max(100, maxVal) * 1.15);
+  kpiChart.update();
+
+  // Summary
+  const area = document.getElementById('summaryArea');
+  area.innerHTML = '';
+  const avg = perc.reduce((a,b)=>a+b,0)/perc.length;
+  const done = perc.filter(p=>p>=100).length;
+  const near = perc.filter(p=>p>=80 && p<100).length;
+  const low  = perc.filter(p=>p<80).length;
+  const h = document.createElement('div');
+  h.innerHTML = `<strong>TB chung:</strong> ${avg.toFixed(1)}% — <strong>Đạt/sớm:</strong> ${done} — <strong>Gần đạt:</strong> ${near} — <strong>Chưa đạt:</strong> ${low}`;
+  area.appendChild(h);
+  area.appendChild(document.createElement('hr'));
+
+  rows.forEach(r => {
+    const d = document.createElement('div');
+    d.style.marginBottom = '8px';
+    d.innerHTML = `<strong>${r.label}</strong><br>
+      Thực hiện: <em>${r.current}</em> — Chỉ tiêu: <em>${r.target}</em><br>
+      <span style="color:${colorFor(r.percent)};font-weight:700">${r.percent.toFixed(1)}%</span> hoàn thành`;
+    area.appendChild(d);
+  });
+
+  // Table
+  const tbody = document.querySelector('#dataTable tbody');
+  tbody.innerHTML = '';
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.i}</td><td>${r.label}</td><td>${r.current}</td><td>${r.target}</td><td>${r.percent.toFixed(1)}%</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById('calcBtn').addEventListener('click', e=>{ e.preventDefault(); updateUI(); });
+document.getElementById('resetBtn').addEventListener('click', e=>{
+  e.preventDefault();
+  DEFAULT_METRICS.forEach(m=>{
+    document.getElementById(m.key + '_current').value = m.target;
+    document.getElementById(m.key + '_target').value = m.target;
+  });
+  updateUI();
+});
+
+// Export PNG
+document.getElementById('exportPng').addEventListener('click', ()=>{
+  const url = document.getElementById('kpiChart').toDataURL('image/png',1.0);
+  const a = document.createElement('a'); a.href=url; a.download='kpi_ubkt_chart.png'; a.click();
+});
+
+// Export CSV
+document.getElementById('exportCsv').addEventListener('click', ()=>{
+  const rows = gather();
+  let csv = 'index,label,current,target,percent\n';
+  rows.forEach(r=>{ csv += `${r.i},"${r.label.replace(/"/g,'""')}",${r.current},${r.target},${r.percent.toFixed(2)}\n`; });
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='kpi_ubkt_data.csv'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+// Export JSON
+document.getElementById('exportJson').addEventListener('click', ()=>{
+  const rows = gather();
+  const blob = new Blob([JSON.stringify(rows, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='kpi_ubkt_data.json'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+// Download HTML snapshot
+document.getElementById('downloadHtml').addEventListener('click', ()=>{
+  const doctype = '<!doctype html>\n';
+  const html = doctype + document.documentElement.outerHTML;
+  const blob = new Blob([html], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='kpi_ubkt_du.html'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+// Init
+updateUI();
+</script>
+</body>
+</html>
